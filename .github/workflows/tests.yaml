@@ -44,20 +44,28 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Prepare env (MySQL testing)
+      - name: Prepare env (write .env.testing explicitly)
         run: |
           cp .env.example .env
           php artisan key:generate
-          # cria .env.testing se não existir
-          [ -f .env.testing ] || cp .env.example .env.testing
-          # força MySQL em 127.0.0.1
-          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env.testing
-          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
-          sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
-          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=testing/' .env.testing
-          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
-          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=password/' .env.testing
-          # limpa possíveis caches de config
+
+          cat > .env.testing <<'EOF'
+          APP_ENV=testing
+          APP_DEBUG=true
+
+          DB_CONNECTION=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=testing
+          DB_USERNAME=root
+          DB_PASSWORD=password
+          EOF
+
+          # log de conferência
+          echo "----- .env.testing -----"
+          cat .env.testing | sed 's/DB_PASSWORD=.*/DB_PASSWORD=****/' || true
+          echo "------------------------"
+
           php artisan config:clear
 
       - name: Wait for MySQL (extra guard)
@@ -69,7 +77,7 @@ jobs:
           done
 
       - name: Run migrations (testing)
-        run: php artisan migrate --env=testing
+        run: php artisan migrate --env=testing -v
 
       - name: Run tests
-        run: php artisan test
+        run: php artisan test -v
