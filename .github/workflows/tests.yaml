@@ -3,29 +3,71 @@ name: tests
 on: [push, pull_request]
 
 jobs:
-  phpunit:
+  phpunit-mysql:
     runs-on: ubuntu-latest
-    services: {}
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mbstring, pdo, pdo_sqlite
+          extensions: mbstring, pdo, pdo_mysql
           coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: |
+            **/vendor
+            ~/.composer/cache
+          key: composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Prepare env (SQLite)
+      - name: Prepare env (MySQL testing)
         run: |
           cp .env.example .env
-          php -r "file_exists('.env.testing') || copy('.env.example','.env.testing');"
-          sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=sqlite/' .env.testing
-          sed -i 's/DB_DATABASE=.*/DB_DATABASE=:memory:/' .env.testing
           php artisan key:generate
+          # Cria .env.testing ou reutiliza o seu
+          if [ ! -f .env.testing ]; then cp .env.example .env.testing; fi
+          # Força MySQL em ambiente de teste apontando para o serviço do Actions (localhost)
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env.testing
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
+          sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
+          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=testing/' .env.testing
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=password/' .env.testing
+
+      - name: Wait for MySQL (extra guard)
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -ppassword && break
+            echo "MySQL not ready yet... ($i)"
+            sleep 2
+          done
+
+      - name: Run migrations (testing)
+        run: php artisan migrate --env=testing
 
       - name: Run tests
         run: php artisan test
