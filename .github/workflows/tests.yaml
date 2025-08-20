@@ -46,9 +46,11 @@ jobs:
 
       - name: Prepare env (write .env.testing explicitly)
         run: |
+          # .env para comandos artisan
           cp .env.example .env
-          php artisan key:generate
+          php artisan key:generate --force
 
+          # cria .env.testing do zero (MySQL service exposto em 127.0.0.1)
           cat > .env.testing <<'EOF'
           APP_ENV=testing
           APP_DEBUG=true
@@ -61,11 +63,15 @@ jobs:
           DB_PASSWORD=password
           EOF
 
-          # log de conferência
+          # copia APP_KEY do .env para o .env.testing
+          APP_KEY=$(grep '^APP_KEY=' .env | cut -d= -f2-)
+          echo "APP_KEY=$APP_KEY" >> .env.testing
+
           echo "----- .env.testing -----"
-          cat .env.testing | sed 's/DB_PASSWORD=.*/DB_PASSWORD=****/' || true
+          sed 's/DB_PASSWORD=.*/DB_PASSWORD=****/' .env.testing || true
           echo "------------------------"
 
+          # limpa cache de config
           php artisan config:clear
 
       - name: Wait for MySQL (extra guard)
@@ -77,7 +83,7 @@ jobs:
           done
 
       - name: Run migrations (testing)
-        run: php artisan migrate --env=testing
-        
+        run: php artisan migrate --env=testing -q
+
       - name: Run tests
         run: php artisan test
