@@ -48,15 +48,17 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
-          # Cria .env.testing ou reutiliza o seu
-          if [ ! -f .env.testing ]; then cp .env.example .env.testing; fi
-          # Força MySQL em ambiente de teste apontando para o serviço do Actions (localhost)
+          # cria .env.testing se não existir
+          [ -f .env.testing ] || cp .env.example .env.testing
+          # força MySQL em 127.0.0.1
           sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env.testing
           sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env.testing
           sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env.testing
           sed -i 's/^DB_DATABASE=.*/DB_DATABASE=testing/' .env.testing
           sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env.testing
           sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=password/' .env.testing
+          # limpa possíveis caches de config
+          php artisan config:clear
 
       - name: Wait for MySQL (extra guard)
         run: |
